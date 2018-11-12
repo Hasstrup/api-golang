@@ -18,7 +18,7 @@ type App struct {
 }
 
 func (a *App) Initialize(user, password, dbname string) {
-	connectionString := fmt.Sprintf("user=%s password=%s dbname=%s", user, password, dbname)
+	connectionString := fmt.Sprintf("user=hasstrupezekiel password='' dbname=grocery sslmode=disable")
 	var err error
 	a.DB, err = sql.Open("postgres", connectionString)
 
@@ -26,9 +26,12 @@ func (a *App) Initialize(user, password, dbname string) {
 		log.Fatal(err)
 	}
 	a.Router = mux.NewRouter()
+	a.initializeRoutes()
 }
 
-func (a *App) Run(address string) {}
+func (a *App) Run(address string) {
+	log.Fatal(http.ListenAndServe(":8000", a.Router))
+}
 
 func (a *App) getProduct(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -53,11 +56,12 @@ func (a *App) getProduct(w http.ResponseWriter, r *http.Request) {
 func (a *App) getProducts(w http.ResponseWriter, r *http.Request) {
 	count, _ := strconv.Atoi(r.FormValue("count"))
 	start, _ := strconv.Atoi(r.FormValue("start"))
+
 	if count > 10 || count < 1 {
 		count = 10
 	}
 	if start < 0 {
-		start = 0 //this makes sense I guess
+		start = 0
 	}
 
 	products, err := getProducts(a.DB, start, count)
@@ -74,6 +78,7 @@ func (a *App) createProduct(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&p); err != nil {
 		respondWithError(w, 400, "Invalid request")
 	}
+
 	defer r.Body.Close()
 
 	if err := p.createProduct(a.DB); err != nil {
@@ -84,7 +89,7 @@ func (a *App) createProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) updateProduct(w http.ResponseWriter, r *http.Request) {
-	//get the id
+	// so essentially this is how you access the params
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
 	if err != nil {
@@ -94,6 +99,14 @@ func (a *App) updateProduct(w http.ResponseWriter, r *http.Request) {
 	var p product
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&p); err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	defer r.Body.Close()
+	p.ID = id
+
+	if err := p.updateProduct(a.DB); err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
